@@ -86,3 +86,90 @@ def format_changes_binary(pom, a, b):
                            b.decode('utf8').split('\n'))
     return '\n'.join(lines).encode('utf8')
 
+
+class GitGetBlob:
+
+    def __init__(self):
+        self.process = subprocess.Popen(['git', 'cat-file', '--batch'],
+                                        stdin=subprocess.PIPE,
+                                        stdout=subprocess.PIPE)
+
+    def get_blob_content(self, blob_id):
+        self.process.stdin.write(blob_id + b'\n')
+        self.process.stdin.flush()
+        objhash, objtype, objsize = self.process.stdout.readline().split()
+        contents_plus_newline = self.process.stdout.read(
+            int(objsize) + 1)
+        contents = contents_plus_newline[:-1]
+        return contents
+
+    def close(self):
+        self.process.stdin.close()
+        self.process.wait()
+
+
+class ReformatChanges:
+
+    def __init__(self, pom):
+        self.pom = pom
+        self.git = GitGetBlob()
+
+    def run(self, filename, content):
+        old_content = self.git.get_blob_content(b'before:' + filename)
+        return format_changes_binary(self.pom, old_content, content)
+
+
+class Lint:
+
+    def __init__(self, base, head):
+        args = fr.FilteringOptions.default_options()
+        args.force = True
+        args.partial = True
+        args.refs = [base + '..' + head]
+        args.repack = False
+        args.replace_refs = 'update-no-add'
+        self.args = args
+        self.file_filter = ReformatChanges("pom.xml")
+        self.blobs_handled = {}
+        self.git_get_blob = None
+        self.filter = None
+
+    def run(self):
+        self.git_get_blob = GitGetBlob()
+        self.filter = fr.RepoFilter(self.args,
+                                    commit_callback=self.commit_callback)
+        self.filter.run()
+        self.git_get_blob.close()
+
+    def is_relevant(self, filename):
+        return filename.endswith(b'.java')
+
+    def commit_callback(self, commit, metadata):
+        for change in commit.file_changes:
+            self.handle_file_change(change)
+
+    def handle_file_change(self, change):
+        if not self.is_relevant(change.filename):
+            return
+        if change.type == b'D':
+            return
+        if change.blob_id in self.blobs_handled:
+            change.blob_id = self.blobs_handled[change.blob_id]
+        else:
+            content = self.git_get_blob.get_blob_content(change.blob_id)
+            new_content = self.file_filter.run(change.filename, content)
+            new_blob = fr.Blob(new_content)
+            self.filter.insert(new_blob)
+
+            # Record our handling of the blob and use it for this change
+            self.blobs_handled[change.blob_id] = new_blob.id
+            change.blob_id = new_blob.id
+
+
+def rewrite_pr(repo, base, head):
+    cwd = os.getcwd()
+    try:
+        os.chdir(repo)
+        Lint(base, head).run()
+    finally:
+        os.chdir(cwd)

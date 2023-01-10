@@ -1,6 +1,8 @@
+import pytest
 import pr_formatter
 import difflib
 import textwrap
+import os
 
 
 def test_add():
@@ -114,6 +116,7 @@ def test_format_changes():
     expected = [line.replace("   false", "true") for line in a]
     assert expected == pr_formatter.format_changes(pom, a, b)
 
+
 def test_format_changes_binary():
     pom = "resources/example_pom.xml"
     a = textwrap.dedent("""\
@@ -129,3 +132,13 @@ def test_format_changes_binary():
     expected = a.replace("   false", "true").encode('utf8')
     assert expected == pr_formatter.format_changes_binary(pom, bytes_a, bytes_b)
 
+@pytest.mark.skip(reason="test would fail on any other machine")
+def test_git_get_content():
+    cwd = os.getcwd()
+    try:
+        os.chdir("../mastodon")
+        git = pr_formatter.GitGetBlob()
+        git.get_blob_content(
+            b"before:src/main/java/org/mastodon/mamut/MainWindow.java")
+    finally:
+        os.chdir(cwd)
