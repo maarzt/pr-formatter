@@ -1,0 +1,43 @@
+diff --git a/src/main/java/org/mastodon/mamut/MamutBranchViewTrackSchemeHierarchy.java b/src/main/java/org/mastodon/mamut/MamutBranchViewTrackSchemeHierarchy.java
+index ecace0121..9e475f543 100644
+--- a/src/main/java/org/mastodon/mamut/model/branch/ModelBranchGraph.java
++++ b/src/main/java/org/mastodon/mamut/model/branch/ModelBranchGraph.java
+@@ -39,0 +40,2 @@ import net.imglib2.RealLocalizable;
++import java.util.concurrent.locks.ReentrantReadWriteLock;
++
+@@ -49,0 +52 @@ public class ModelBranchGraph extends BranchGraphImp< Spot, Link, BranchSpot, Br
++       private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+@@ -60,0 +64,5 @@ public class ModelBranchGraph extends BranchGraphImp< Spot, Link, BranchSpot, Br
++       public ReentrantReadWriteLock getLock()
++       {
++               return lock;
++       }
++
+@@ -71,0 +80,27 @@ public class ModelBranchGraph extends BranchGraphImp< Spot, Link, BranchSpot, Br
++
++       @Override
++       public void graphRebuilt()
++       {
++               if ( lock == null )
++               {
++                       // NB: graphRebuilt() is called the first time, even before the lock
++                       // is initialized. This is because the super class (BranchGraphImp)
++                       // calls graphRebuilt() in its constructor.
++                       // But that's not a problem. We don't need to use the lock while the
++                       // constructor is run, since no other thread can access the
++                       // branch graph before the constructor finished.
++                       super.graphRebuilt();
++               }
++               else
++               {
++                       lock.writeLock().lock();
++                       try
++                       {
++                               super.graphRebuilt();
++                       }
++                       finally
++                       {
++                               lock.writeLock().unlock();
++                       }
++               }
++       }
