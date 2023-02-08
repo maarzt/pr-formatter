@@ -2,6 +2,8 @@ import pytest
 import difflib
 import textwrap
 import os
+import tempfile
+import shutil
 from pr_formatter import functions
 
 
@@ -96,6 +98,22 @@ def test_format_java():
         }
         """).split('\n')
     assert expected == functions.format_java(pom, text)
+
+
+def test_format_many_java():
+    java_files = {
+        "a":b"class A { boolean run() { return true; } }\n",
+        "b":b"class B { boolean run() { return false; } }\n"
+    }
+    expected = {
+        'a': b'class A {\n\n\tboolean run() {\n\t\treturn true;\n\t}\n}\n',
+        'b': b'class B {\n\n\tboolean run() {\n\t\treturn false;\n\t}\n}\n'
+    }
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        pom_xml = os.path.join(tmp_dir, "pom.xml")
+        shutil.copyfile("resources/example_pom.xml", pom_xml)
+        os.makedirs(os.path.join(tmp_dir, "src/main/java"))
+        assert expected == functions.format_many_java(pom_xml, java_files)
 
 
 def test_format_changes():

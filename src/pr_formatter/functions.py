@@ -62,6 +62,28 @@ def remove_formatter_statements(lines):
     return [line for line in lines if line not in [formatter_on, formatter_off]]
 
 
+def format_many_java(pom, code):
+    repo = os.path.dirname(pom)
+    src_dir = os.path.join(repo, "src/main/java")
+    with tempfile.TemporaryDirectory(prefix="pr_formatter_tmp_dir", dir=src_dir) as tmp_dir:
+        write_java_files(tmp_dir, code)
+        tmp_basename = os.path.basename(tmp_dir)
+        param = "-Dformatter.includes=" + tmp_basename + "/"
+        subprocess.check_call(["mvn", "formatter:format", param], cwd=repo)
+        return read_java_files(tmp_dir, code.keys())
+
+
+def read_java_files(dir, filenames):
+    """Reads the given java files from the directory."""
+    return dict([(blob_id, read_file(os.path.join(dir, blob_id + ".java"))) for blob_id in filenames])
+
+
+def write_java_files(dir, namesAndContent):
+    """Writes a given dictionary of java files into the give directory."""
+    for filename, content in namesAndContent.items():
+        write_file(os.path.join(dir, filename + ".java"), content)
+
+
 def format_java(pom, code):
     temp_dir = tempfile.TemporaryDirectory()
     shutil.copy(pom, temp_dir.name + "/pom.xml")
