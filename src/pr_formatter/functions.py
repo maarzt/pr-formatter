@@ -7,13 +7,15 @@ import subprocess
 import git_filter_repo as fr
 
 
-def write_file(content, tmpfile):
-    with open(tmpfile, "wb") as f:
+def write_file(file, content):
+    """Writes to content (given as bytes), into the given file."""
+    with open(file, "wb") as f:
         f.write(content)
 
 
-def read_file(tmpfile):
-    with open(tmpfile, "rb") as f:
+def read_file(file):
+    """Returns the content of the text file as bytes."""
+    with open(file, "rb") as f:
         return f.read()
 
 
@@ -66,7 +68,7 @@ def format_java(pom, code):
     source_dir = temp_dir.name + "/src/main/java"
     os.makedirs(source_dir, exist_ok=False)
     java_file = source_dir + "/file.java"
-    write_file('\n'.join(code).encode('utf8'), java_file)
+    write_file(java_file, '\n'.join(code).encode('utf8'))
     subprocess.check_call(["mvn", "formatter:format"], cwd=temp_dir.name)
     formatted_code = read_file(java_file).decode('utf8').split('\n')
     temp_dir.cleanup()
