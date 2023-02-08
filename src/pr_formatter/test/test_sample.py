@@ -38,6 +38,16 @@ def test_parse_ranges():
     assert ranges == [(2, 3), (17, 19)]
 
 
+def test_split_diff():
+    diff = textwrap.dedent("""\
+        +++ b/a.java
+        @@ -3 +4,2 @@
+        +++ b/b.java
+        @@ -8 +8,9 @@
+        """).encode("utf8")
+    assert {'a.java': ['@@ -3 +4,2 @@'], 'b.java': ['@@ -8 +8,9 @@']} == functions.split_diff(diff)
+
+
 def test_insert_new_line_markers():
     a = ["a", "b", "c"]
     b = ["a", "bb", "c"]
@@ -102,12 +112,12 @@ def test_format_java():
 
 def test_format_many_java():
     java_files = {
-        "a":b"class A { boolean run() { return true; } }\n",
-        "b":b"class B { boolean run() { return false; } }\n"
+        b"a":b"class A { boolean run() { return true; } }\n",
+        b"b":b"class B { boolean run() { return false; } }\n"
     }
     expected = {
-        'a': b'class A {\n\n\tboolean run() {\n\t\treturn true;\n\t}\n}\n',
-        'b': b'class B {\n\n\tboolean run() {\n\t\treturn false;\n\t}\n}\n'
+        b'a': b'class A {\n\n\tboolean run() {\n\t\treturn true;\n\t}\n}\n',
+        b'b': b'class B {\n\n\tboolean run() {\n\t\treturn false;\n\t}\n}\n'
     }
     with tempfile.TemporaryDirectory() as tmp_dir:
         pom_xml = os.path.join(tmp_dir, "pom.xml")
