@@ -1,5 +1,4 @@
 import pytest
-import difflib
 import textwrap
 import os
 import tempfile
@@ -10,13 +9,6 @@ from pr_formatter import functions
 def test_read_file():
     text = functions.read_file("resources/hello.txt").splitlines()
     assert text == [b"Hello World!"]
-
-
-def test_unified_diff():
-    a = ["a", "b", "c"]
-    b = ["a", "bb", "c"]
-    diff = list(difflib.unified_diff(a, b, n=0))
-    assert diff == ['--- \n', '+++ \n', '@@ -2 +2 @@\n', '-b', '+bb']
 
 
 def test_parse_range():
@@ -48,23 +40,15 @@ def test_split_diff():
     assert {'a.java': ['@@ -3 +4,2 @@'], 'b.java': ['@@ -8 +8,9 @@']} == functions.split_diff(diff)
 
 
-def test_insert_new_line_markers():
-    a = ["a", "b", "c"]
-    b = ["a", "bb", "c"]
-    r = functions.insert_new_line_markers(
-        a, b, begin="_begin_", end="_end_")
-    assert r == ["a", "_begin_", "bb", "_end_", "c"]
-
-
 def test_insert_formatter_statements():
     a = textwrap.dedent("""\
         class Example {
             boolean getBoolean() {
-                return false;
+                return true;
             }
         }
-        """).split('\n')
-    b = [line.replace("false", "true") for line in a]
+        """).encode("utf8")
+    b = ["@@ -3 +3 @@"]
     expected = textwrap.dedent("""\
         // @formatter:off PULL-REQUEST-FORMATTER
         class Example {
@@ -74,8 +58,8 @@ def test_insert_formatter_statements():
         // @formatter:off PULL-REQUEST-FORMATTER
             }
         }
-        """).split('\n')
-    assert functions.insert_formatter_statements(old=a, new=b) == expected
+        """).encode("utf8")
+    assert functions.insert_formatter_statements_binary(content=a, diff=b) == expected
 
 
 def test_remove_formatter_statements():
@@ -85,35 +69,14 @@ def test_remove_formatter_statements():
         b
         // @formatter:off PULL-REQUEST-FORMATTER
         c
-        """).split('\n')
-    expected = ["a", "b", "c", ""]
-    assert expected == functions.remove_formatter_statements(text)
-
-
-def test_format_java():
-    text = textwrap.dedent("""\
-        class Example {
-            boolean getBoolean() {
-                return     true;
-            }
-        }
-        """).split('\n')
-    pom = "resources/example_pom.xml"
-    expected = textwrap.dedent("""\
-        class Example {
-        
-        \tboolean getBoolean() {
-        \t\treturn true;
-        \t}
-        }
-        """).split('\n')
-    assert expected == functions.format_java(pom, text)
+        """).encode("utf8")
+    assert functions.remove_formatter_statements_binary(text) == b"a\nb\nc\n"
 
 
 def test_format_many_java():
     java_files = {
-        b"a":b"class A { boolean run() { return true; } }\n",
-        b"b":b"class B { boolean run() { return false; } }\n"
+        b'a': b'class A { boolean run() { return true; } }\n',
+        b'b': b'class B { boolean run() { return false; } }\n'
     }
     expected = {
         b'a': b'class A {\n\n\tboolean run() {\n\t\treturn true;\n\t}\n}\n',
@@ -125,36 +88,6 @@ def test_format_many_java():
         os.makedirs(os.path.join(tmp_dir, "src/main/java"))
         assert expected == functions.format_many_java(pom_xml, java_files)
 
-
-def test_format_changes():
-    pom = "resources/example_pom.xml"
-    a = textwrap.dedent("""\
-        class Example {
-        
-        \tboolean    getBoolean() {
-        \t\treturn    false;
-        \t}
-        }
-        """).split('\n')
-    b = [line.replace("false", "true") for line in a]
-    expected = [line.replace("   false", "true") for line in a]
-    assert expected == functions.format_changes(pom, a, b)
-
-
-def test_format_changes_binary():
-    pom = "resources/example_pom.xml"
-    a = textwrap.dedent("""\
-        class Example {
-        
-        \tboolean    getBoolean() {
-        \t\treturn    false;
-        \t}
-        }
-        """)
-    bytes_a = a.encode('utf8')
-    bytes_b = a.replace('false', 'true').encode('utf8')
-    expected = a.replace("   false", "true").encode('utf8')
-    assert expected == functions.format_changes_binary(pom, bytes_a, bytes_b)
 
 @pytest.mark.skip(reason="test would fail on any other machine")
 def test_git_get_content():

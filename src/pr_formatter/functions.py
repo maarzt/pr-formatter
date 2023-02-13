@@ -1,7 +1,5 @@
-import difflib
 import os
 import re
-import shutil
 import tempfile
 import subprocess
 import git_filter_repo as fr
@@ -48,11 +46,6 @@ def split_diff(diff):
     return result
 
 
-def insert_new_line_markers(old, new, begin, end):
-    diff = difflib.unified_diff(old, new, n=0)
-    return insert_line_markers(new, diff, begin, end)
-
-
 def insert_line_markers(new, diff, begin, end):
     ranges = parse_ranges(diff)
     n = 0
@@ -65,19 +58,6 @@ def insert_line_markers(new, diff, begin, end):
         n = end_line - 1
     lines.extend(new[n:])
     return lines
-
-
-def insert_formatter_statements(old, new):
-    formatter_on = "// @formatter:on PULL-REQUEST-FORMATTER"
-    formatter_off = "// @formatter:off PULL-REQUEST-FORMATTER"
-    return [formatter_off] + insert_new_line_markers(
-        old, new, begin=formatter_on, end=formatter_off)
-
-
-def remove_formatter_statements(lines):
-    formatter_on = "// @formatter:on PULL-REQUEST-FORMATTER"
-    formatter_off = "// @formatter:off PULL-REQUEST-FORMATTER"
-    return [line for line in lines if line not in [formatter_on, formatter_off]]
 
 
 def format_many_java(pom, code):
@@ -102,44 +82,20 @@ def write_java_files(directory, names_and_contents):
         write_file(os.path.join(directory, filename.decode("utf8") + ".java"), content)
 
 
-def format_java(pom, code):
-    temp_dir = tempfile.TemporaryDirectory()
-    shutil.copy(pom, temp_dir.name + "/pom.xml")
-    source_dir = temp_dir.name + "/src/main/java"
-    os.makedirs(source_dir, exist_ok=False)
-    java_file = source_dir + "/file.java"
-    write_file(java_file, '\n'.join(code).encode('utf8'))
-    subprocess.check_call(["mvn", "formatter:format"], cwd=temp_dir.name)
-    formatted_code = read_file(java_file).decode('utf8').split('\n')
-    temp_dir.cleanup()
-    return formatted_code
-
-
-def format_changes(pom, a, b):
-    text = insert_formatter_statements(a, b)
-    text = format_java(pom, text)
-    text = remove_formatter_statements(text)
-    return text
-
-
-def format_changes_binary(pom, a, b):
-    lines = format_changes(pom,
-                           a.decode('utf8').split('\n'),
-                           b.decode('utf8').split('\n'))
-    return '\n'.join(lines).encode('utf8')
-
-
 def insert_formatter_statements_binary(content, diff):
-    formatter_on = b"// @formatter:on PULL-REQUEST-FORMATTER"
-    formatter_off = b"// @formatter:off PULL-REQUEST-FORMATTER"
-    return b'\n'.join([formatter_off] + insert_line_markers(
-        content.splitlines(), diff, begin=formatter_on, end=formatter_off))
+    formatter_on = b"// @formatter:on PULL-REQUEST-FORMATTER\n"
+    formatter_off = b"// @formatter:off PULL-REQUEST-FORMATTER\n"
+    lines = content.splitlines(keepends=True)
+    lines_with_markers = insert_line_markers(lines, diff, begin=formatter_on, end=formatter_off)
+    return b''.join([formatter_off] + lines_with_markers)
 
 
 def remove_formatter_statements_binary(content):
-    formatter_on = b"// @formatter:on PULL-REQUEST-FORMATTER"
-    formatter_off = b"// @formatter:off PULL-REQUEST-FORMATTER"
-    return b'\n'.join([line for line in content.splitlines() if not (formatter_off in line or formatter_on in line)])
+    formatter_on = b"@formatter:on PULL-REQUEST-FORMATTER"
+    formatter_off = b"@formatter:off PULL-REQUEST-FORMATTER"
+    lines_with_markers = content.splitlines(keepends=True)
+    lines = [line for line in lines_with_markers if not (formatter_off in line or formatter_on in line)]
+    return b''.join(lines)
 
 
 def get_file_diffs(base, commit_hash):
@@ -169,17 +125,6 @@ class GitGetBlob:
         self.process.wait()
 
 
-class ReformatChanges:
-
-    def __init__(self, pom):
-        self.pom = pom
-        self.git = GitGetBlob()
-
-    def run(self, filename, content):
-        old_content = self.git.get_blob_content(b'before:' + filename)
-        return format_changes_binary(self.pom, old_content, content)
-
-
 class Lint:
 
     def __init__(self, base, head):
@@ -191,7 +136,6 @@ class Lint:
         args.replace_refs = 'update-no-add'
         self.args = args
         self.base = base
-        self.file_filter = ReformatChanges("pom.xml")
         self.blobs_handled = {}
         self.git_get_blob = None
         self.filter = None
