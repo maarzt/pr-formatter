@@ -1,3 +1,6 @@
+import subprocess
+import sys
+
 import pytest
 import textwrap
 import os
@@ -99,3 +102,16 @@ def test_git_get_content():
             b"before:src/main/java/org/mastodon/mamut/MainWindow.java")
     finally:
         os.chdir(cwd)
+
+
+def git_show_commits(repo, base, head):
+    return subprocess.check_output(["git", "show", "--pretty=format:%s", f"{base}..{head}"], cwd=repo).decode("utf8")
+
+
+def test_reformatting_git_branch():
+    # copy "resources/example_repo" to a temporary directory
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        shutil.copytree("resources/example_repo", tmp_dir, dirs_exist_ok=True)
+        functions.rewrite_pr(tmp_dir, "master", "add-file")
+        assert git_show_commits(tmp_dir, "master", "add-file") == git_show_commits("resources/example_repo", "master", "add-file-expected")
+
